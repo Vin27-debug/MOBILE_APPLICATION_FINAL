@@ -1,0 +1,7 @@
+{
+  "name": "campus-lost-found",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}
