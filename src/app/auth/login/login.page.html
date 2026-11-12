@@ -1,0 +1,61 @@
+<ion-content [fullscreen]="true">
+  <div class="login-container">
+    <div class="brand">
+      <div class="brand-icon">🔎</div>
+      <h1>Campus <span>Lost & Found</span></h1>
+      <p>Find what's missing. Return what's found.</p>
+    </div>
+
+    <div class="login-card">
+      <h2>Welcome Back!</h2>
+      <p class="description">Sign in to your student account.</p>
+
+      <form (ngSubmit)="login()">
+        <label for="login-email">Email Address</label>
+        <ion-input
+          id="login-email"
+          type="email"
+          name="email"
+          [(ngModel)]="email"
+          placeholder="Enter your email"
+          required
+          email
+          fill="outline"
+        >
+        </ion-input>
+
+        <label for="login-password">Password</label>
+        <ion-input
+          id="login-password"
+          [type]="showPassword ? 'text' : 'password'"
+          name="password"
+          [(ngModel)]="password"
+          placeholder="Enter your password"
+          required
+          fill="outline"
+        >
+        </ion-input>
+
+        <div class="show-password">
+          <input type="checkbox" id="showPassword" [(ngModel)]="showPassword" name="showPassword" />
+          <label for="showPassword">Show password</label>
+        </div>
+
+        @if (errorMessage) {
+        <p class="error-message">{{ errorMessage }}</p>
+        }
+
+        <ion-button expand="block" type="submit" [disabled]="isLoading">
+          {{ isLoading ? 'Signing In...' : 'LOGIN' }}
+        </ion-button>
+      </form>
+
+      <div class="register-link">
+        Don't have an account?
+        <a routerLink="/register">Create Account</a>
+      </div>
+    </div>
+
+    <footer>Campus Lost & Found © 2026</footer>
+  </div>
+</ion-content>

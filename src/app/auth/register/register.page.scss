@@ -1,0 +1,110 @@
+
+ion-content {
+  --background: #f2f6fc;
+}
+
+.register-container {
+  min-height: 100%;
+  padding: 35px 24px;
+  max-width: 480px;
+  margin: auto;
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.brand-icon {
+  width: 65px;
+  height: 65px;
+  background: #e1edff;
+  border-radius: 19px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  margin: 0 auto 13px;
+}
+
+.brand h1 {
+  font-size: 23px;
+  font-weight: 800;
+  color: #172b4d;
+  margin: 0;
+}
+
+.brand h1 span {
+  color: #3286e8;
+}
+
+.brand p {
+  color: #8190a5;
+  font-size: 12px;
+}
+
+.register-card {
+  background: white;
+  padding: 24px 20px;
+  border-radius: 20px;
+  box-shadow: 0 8px 30px rgba(30, 60, 100, 0.07);
+}
+
+.register-card h2 {
+  font-size: 22px;
+  font-weight: 800;
+  color: #172b4d;
+  margin: 0 0 5px;
+}
+
+.description {
+  color: #8190a5;
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+
+.register-card form > label {
+  display: block;
+  color: #263c5b;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 13px 0 7px;
+}
+
+ion-input {
+  --background: #f8faff;
+  --border-color: #dce5f1;
+  --border-radius: 10px;
+  --padding-start: 12px;
+  font-size: 13px;
+}
+
+ion-button {
+  --background: #2368c7;
+  --border-radius: 11px;
+  height: 48px;
+  font-weight: 800;
+  margin-top: 18px;
+}
+
+.error-message {
+  color: #d93434;
+  font-size: 12px;
+}
+
+.success-message {
+  color: #22945a;
+  font-size: 12px;
+}
+
+.login-link {
+  text-align: center;
+  font-size: 12px;
+  color: #8190a5;
+  margin-top: 22px;
+}
+
+.login-link a {
+  color: #2368c7;
+  font-weight: 800;
+  text-decoration: none;
+}

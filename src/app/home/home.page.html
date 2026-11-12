@@ -1,21 +1,216 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-title> Blank </ion-title>
-  </ion-toolbar>
-</ion-header>
 
 <ion-content [fullscreen]="true">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">Blank</ion-title>
-    </ion-toolbar>
-  </ion-header>
+  <div class="dashboard">
 
-  <div id="container">
-    <strong>Ready to create an app?</strong>
-    <p>
-      Start with Ionic
-      <a target="_blank" rel="noopener noreferrer" href="https://ionicframework.com/docs/components">UI Components</a>
-    </p>
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">🔎</div>
+        <div>
+          <h1>Campus <span>Lost &amp; Found</span></h1>
+          <p>Find what's missing. Return what's found.</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <a routerLink="/messages" class="messages-button">
+          💬 Messages
+          <span class="unread-count">
+            {{ totalUnread > 99 ? '99+' : totalUnread }}
+          </span>
+        </a>
+
+        <ion-button fill="clear" class="logout-button" (click)="logout()">
+          Sign out
+        </ion-button>
+      </div>
+    </header>
+
+    <!-- WELCOME -->
+    <section class="welcome-section">
+      <p class="welcome">WELCOME BACK</p>
+      <h2>Hello, {{ displayName }}! 👋</h2>
+      <p>Let's help each other find what's missing.</p>
+    </section>
+
+    <!-- SEARCH -->
+    <div class="search-box">
+      <span>🔍</span>
+      <input
+        type="text"
+        placeholder="Search lost item reports..."
+        aria-label="Search lost item reports"
+        [value]="searchText"
+        (input)="searchItems($event)"
+      />
+
+      @if (searchText) {
+        <button
+          class="clear-search"
+          type="button"
+          (click)="clearSearch()"
+          aria-label="Clear search"
+        >×</button>
+      }
+    </div>
+
+    <!-- CREATE REPORT -->
+    <a class="create-post" routerLink="/report">
+      <div class="create-avatar">{{ getInitials(displayName) }}</div>
+      <span>Have you lost something? Report it here...</span>
+      <strong>＋</strong>
+    </a>
+
+    @if (actionError) {
+      <p class="error-message" role="alert">{{ actionError }}</p>
+    }
+
+    <!-- LOST ITEMS FEED -->
+    <section class="feed-section">
+      <div class="section-heading">
+        <div>
+          <h2>Lost Items Feed</h2>
+          <p>Recently reported items on campus</p>
+        </div>
+        <span class="report-count">{{ filteredItems.length }} reports</span>
+      </div>
+
+      @if (isLoading) {
+        <div class="empty-state">
+          <p>Loading reports...</p>
+        </div>
+      } @else if (errorMessage) {
+        <p class="error-message" role="alert">{{ errorMessage }}</p>
+      } @else {
+
+        @for (item of filteredItems; track item.id) {
+          <article class="post-card">
+
+            <!-- OWNER INFORMATION -->
+            <div class="post-header">
+              <div class="post-avatar">
+                {{ getInitials(item.ownerName) }}
+              </div>
+
+              <div class="post-author">
+                <h3>{{ item.ownerName }}</h3>
+                <p>
+                  {{ item.lastSeenAt.toDate() | date:'medium' }} · Lost item
+                </p>
+              </div>
+
+              @if (item.ownerUid === currentUid) {
+                <span class="your-post">Your post</span>
+              }
+            </div>
+
+            <!-- ITEM DESCRIPTION -->
+            <div class="post-content">
+              <h2>{{ item.itemName }}</h2>
+
+              @if (expandedItemId === item.id) {
+                <p class="full-description">{{ item.description }}</p>
+              } @else {
+                <p class="short-description">{{ item.description }}</p>
+              }
+
+              <div class="post-location">
+                <span>📍</span>
+                <span>{{ item.lastSeenLocation }}</span>
+              </div>
+            </div>
+
+            <!-- ITEM PHOTO -->
+            @if (item.photoUrl) {
+              <img
+                class="post-photo"
+                [src]="item.photoUrl"
+                [alt]="item.itemName"
+                loading="lazy"
+              />
+            } @else {
+              <div class="post-no-photo">
+                <span>🔎</span>
+                <p>No item photo provided</p>
+              </div>
+            }
+
+            <!-- FULL DETAILS -->
+            @if (expandedItemId === item.id) {
+              <div class="expanded-details">
+                <h4>Complete Item Details</h4>
+
+                <div class="detail-row">
+                  <span>Item Name</span>
+                  <strong>{{ item.itemName }}</strong>
+                </div>
+
+                <div class="detail-row">
+                  <span>Reported By</span>
+                  <strong>{{ item.ownerName }}</strong>
+                </div>
+
+                <div class="detail-row">
+                  <span>Last Seen Location</span>
+                  <strong>{{ item.lastSeenLocation }}</strong>
+                </div>
+
+                <div class="detail-row">
+                  <span>Date and Time</span>
+                  <strong>
+                    {{ item.lastSeenAt.toDate() | date:'medium' }}
+                  </strong>
+                </div>
+
+                @if (item.ownerUid !== currentUid) {
+                  <button
+                    class="message-owner-button"
+                    type="button"
+                    (click)="requestItem(item)"
+                  >
+                    💬 Message Owner
+                  </button>
+                } @else {
+                  <p class="owner-note">
+                    This is your own lost item report.
+                  </p>
+                }
+              </div>
+            }
+
+            <!-- POST ACTION -->
+            <div class="post-footer">
+              <button
+                class="view-more-button"
+                type="button"
+                (click)="toggleDetails(item.id)"
+              >
+                {{ expandedItemId === item.id ? 'Show Less ↑' : 'View More ↓' }}
+              </button>
+
+              <span>Campus Lost &amp; Found</span>
+            </div>
+
+          </article>
+        } @empty {
+          <div class="empty-state">
+            <span>🔎</span>
+            <h3>No lost items found</h3>
+            <p>
+              {{ searchText
+                ? 'Try another search keyword.'
+                : 'No lost items yet. Be the first to report one!' }}
+            </p>
+          </div>
+        }
+      }
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      <strong>Campus Lost &amp; Found</strong>
+      <p>Helping students find their belongings.</p>
+    </footer>
+
   </div>
 </ion-content>

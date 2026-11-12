@@ -1,0 +1,133 @@
+
+ion-content {
+  --background: #f2f6fc;
+}
+
+.login-container {
+  min-height: 100%;
+  padding: 45px 24px 25px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 480px;
+  margin: auto;
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 35px;
+}
+
+.brand-icon {
+  width: 75px;
+  height: 75px;
+  background: #e1edff;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  font-size: 35px;
+  margin: 0 auto 18px;
+}
+
+.brand h1 {
+  font-size: 25px;
+  font-weight: 800;
+  color: #172b4d;
+  margin: 0;
+}
+
+.brand h1 span {
+  color: #3286e8;
+}
+
+.brand p {
+  color: #8190a5;
+  font-size: 12px;
+}
+
+.login-card {
+  background: white;
+  padding: 25px 20px;
+  border-radius: 20px;
+  box-shadow: 0 8px 30px rgba(30, 60, 100, 0.07);
+}
+
+.login-card h2 {
+  color: #172b4d;
+  font-size: 23px;
+  font-weight: 800;
+  margin: 0 0 5px;
+}
+
+.description {
+  color: #8190a5;
+  font-size: 13px;
+  margin-bottom: 25px;
+}
+
+.login-card form > label {
+  display: block;
+  color: #263c5b;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 17px 0 8px;
+}
+
+ion-input {
+  --background: #f8faff;
+  --border-color: #dce5f1;
+  --border-radius: 11px;
+  --padding-start: 13px;
+  font-size: 13px;
+}
+
+.show-password {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 20px;
+  color: #718096;
+  font-size: 12px;
+}
+
+.show-password input {
+  accent-color: #3286e8;
+}
+
+.show-password label {
+  cursor: pointer;
+}
+
+ion-button {
+  --background: #2368c7;
+  --border-radius: 11px;
+  height: 48px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.error-message {
+  color: #d93434;
+  font-size: 12px;
+  margin: 10px 0;
+}
+
+.register-link {
+  text-align: center;
+  font-size: 12px;
+  color: #8190a5;
+  margin-top: 23px;
+}
+
+.register-link a {
+  color: #2368c7;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+footer {
+  text-align: center;
+  color: #9aa8b9;
+  font-size: 11px;
+  margin-top: 30px;
+}

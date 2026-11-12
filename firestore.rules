@@ -1,0 +1,254 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isParticipant(conversation) {
+      return signedIn() &&
+        (
+          conversation.ownerUid == request.auth.uid ||
+          conversation.requesterUid == request.auth.uid
+        );
+    }
+
+    function verifiedForItem(itemId, ownerUid, conversationId) {
+      let conversationPath =
+        /databases/$(database)/documents/conversations/$(conversationId);
+
+      return exists(conversationPath) &&
+        get(conversationPath).data.itemId == itemId &&
+        get(conversationPath).data.ownerUid == ownerUid &&
+        get(conversationPath).data.status == 'verified' &&
+        get(conversationPath).data.verifiedBy == ownerUid;
+    }
+
+    function validConversationMetadata() {
+      return request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            'lastMessage',
+            'lastMessageAt',
+            'ownerUnread',
+            'requesterUnread',
+            'ownerLastReadAt',
+            'requesterLastReadAt'
+          ]) &&
+        (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['lastMessage']) ||
+          request.resource.data.lastMessage is string
+        ) &&
+        (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['lastMessageAt']) ||
+          request.resource.data.lastMessageAt == request.time
+        ) &&
+        (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['ownerUnread']) ||
+          (
+            request.resource.data.ownerUnread is int &&
+            request.resource.data.ownerUnread >= 0
+          )
+        ) &&
+        (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['requesterUnread']) ||
+          (
+            request.resource.data.requesterUnread is int &&
+            request.resource.data.requesterUnread >= 0
+          )
+        ) &&
+        (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['ownerLastReadAt']) ||
+          request.resource.data.ownerLastReadAt == request.time
+        ) &&
+        (
+          !request.resource.data.diff(resource.data)
+            .affectedKeys().hasAny(['requesterLastReadAt']) ||
+          request.resource.data.requesterLastReadAt == request.time
+        );
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+
+      allow create: if isOwner(uid) &&
+        request.resource.data.keys().hasOnly([
+          'uid', 'fullName', 'studentId', 'email', 'role', 'createdAt'
+        ]) &&
+        request.resource.data.uid == uid &&
+        request.resource.data.fullName is string &&
+        request.resource.data.studentId is string &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.role == 'student' &&
+        request.resource.data.createdAt == request.time;
+
+      allow update: if isOwner(uid) &&
+        request.resource.data.uid == uid &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.role == 'student' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fullName', 'studentId'
+        ]);
+
+      allow delete: if false;
+    }
+
+    match /lostItems/{itemId} {
+      allow get, list: if signedIn();
+
+      allow create: if signedIn() &&
+        request.resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.status == 'lost' &&
+        request.resource.data.itemName is string &&
+        request.resource.data.description is string &&
+        request.resource.data.lastSeenLocation is string &&
+        request.resource.data.lastSeenAt is timestamp &&
+        request.resource.data.createdAt == request.time &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        request.resource.data.ownerName ==
+          get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data.fullName &&
+        request.resource.data.keys().hasOnly([
+          'ownerUid', 'ownerName', 'itemName', 'description',
+          'lastSeenLocation', 'lastSeenAt', 'photoUrl',
+          'status', 'createdAt'
+        ]);
+
+      allow update: if signedIn() &&
+        resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.ownerUid == resource.data.ownerUid &&
+        (
+          (
+            request.resource.data.status == resource.data.status &&
+            request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly([
+                'ownerName', 'itemName', 'description',
+                'lastSeenLocation', 'lastSeenAt', 'photoUrl'
+              ])
+          ) ||
+          (
+            resource.data.status == 'lost' &&
+            request.resource.data.status == 'returned' &&
+            request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly([
+                'status', 'resolvedByConversationId', 'returnedAt'
+              ]) &&
+            request.resource.data.resolvedByConversationId is string &&
+            request.resource.data.returnedAt == request.time &&
+            verifiedForItem(
+              itemId,
+              resource.data.ownerUid,
+              request.resource.data.resolvedByConversationId
+            )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /conversations/{conversationId} {
+      allow get: if signedIn() &&
+        (
+          !exists(
+            /databases/$(database)/documents/conversations/$(conversationId)
+          ) ||
+          isParticipant(resource.data)
+        );
+
+      allow list: if isParticipant(resource.data);
+
+      allow create: if signedIn() &&
+        request.resource.data.keys().hasOnly([
+          'itemId', 'itemName', 'ownerUid',
+          'requesterUid', 'status', 'createdAt'
+        ]) &&
+        request.resource.data.requesterUid == request.auth.uid &&
+        request.resource.data.ownerUid != request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.createdAt == request.time &&
+        exists(
+          /databases/$(database)/documents/lostItems/$(request.resource.data.itemId)
+        ) &&
+        get(
+          /databases/$(database)/documents/lostItems/$(request.resource.data.itemId)
+        ).data.ownerUid == request.resource.data.ownerUid &&
+        get(
+          /databases/$(database)/documents/lostItems/$(request.resource.data.itemId)
+        ).data.itemName == request.resource.data.itemName &&
+        get(
+          /databases/$(database)/documents/lostItems/$(request.resource.data.itemId)
+        ).data.status == 'lost';
+
+      allow update: if signedIn() &&
+        isParticipant(resource.data) &&
+        (
+          (
+            resource.data.ownerUid == request.auth.uid &&
+            resource.data.status == 'pending' &&
+            get(
+              /databases/$(database)/documents/lostItems/$(resource.data.itemId)
+            ).data.status == 'lost' &&
+            request.resource.data.status == 'verified' &&
+            request.resource.data.verifiedBy == request.auth.uid &&
+            request.resource.data.verifiedAt == request.time &&
+            request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly([
+                'status', 'verifiedBy', 'verifiedAt'
+              ])
+          ) ||
+          validConversationMetadata()
+        );
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function parentConversation() {
+          return get(
+            /databases/$(database)/documents/conversations/$(conversationId)
+          ).data;
+        }
+
+        allow get, list: if isParticipant(parentConversation());
+
+        allow create: if isParticipant(parentConversation()) &&
+          request.resource.data.senderUid == request.auth.uid &&
+          request.resource.data.keys().hasOnly([
+            'senderUid', 'text', 'photoUrl',
+            'photoStatus', 'createdAt'
+          ]) &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.text is string &&
+          (
+            request.resource.data.text.size() > 0 ||
+            request.resource.data.get('photoStatus', '') == 'uploading'
+          );
+
+        allow update: if isParticipant(parentConversation()) &&
+          resource.data.senderUid == request.auth.uid &&
+          resource.data.get('photoStatus', '') == 'uploading' &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['photoUrl', 'photoStatus']) &&
+          (
+            request.resource.data.photoStatus == 'uploaded' &&
+            request.resource.data.photoUrl is string &&
+            request.resource.data.photoUrl.size() > 0
+            ||
+            request.resource.data.photoStatus == 'failed'
+          );
+
+        allow delete: if false;
+      }
+    }
+  }
+}

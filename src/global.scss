@@ -35,3 +35,61 @@
 /* @import "@ionic/angular/css/palettes/dark.always.css"; */
 /* @import "@ionic/angular/css/palettes/dark.class.css"; */
 @import '@ionic/angular/css/palettes/dark.system.css';
+
+
+
+/* =================================
+   GLOBAL TEXTBOX VISIBILITY FIX
+================================= */
+
+/* Ionic inputs */
+ion-input,
+ion-textarea {
+    --color: #172b4d;
+    --placeholder-color: #8190a5;
+    --background: #f8faff;
+    --highlight-color-focused: #2368c7;
+}
+
+/* Text inside Ionic input fields */
+ion-input::part(native),
+ion-textarea::part(native) {
+    color: #172b4d !important;
+    caret-color: #2368c7;
+    -webkit-text-fill-color: #172b4d;
+}
+
+/* Regular HTML textboxes */
+input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+    color: #172b4d !important;
+    caret-color: #2368c7;
+    -webkit-text-fill-color: #172b4d;
+}
+
+/* Placeholder text */
+input::placeholder,
+textarea::placeholder,
+ion-input::part(native)::placeholder,
+ion-textarea::part(native)::placeholder {
+    color: #8190a5 !important;
+    opacity: 1;
+    -webkit-text-fill-color: #8190a5;
+}
+
+/* Date and time inputs */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+    color: #172b4d !important;
+    background: #f8faff !important;
+    color-scheme: light;
+}
+
+/* Focused textbox */
+input:focus,
+textarea:focus,
+select:focus {
+    outline-color: #2368c7;
+}
