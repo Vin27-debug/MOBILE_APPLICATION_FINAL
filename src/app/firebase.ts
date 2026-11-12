@@ -19,6 +19,41 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
+export function logFirestoreOperationError(
+  operation: string,
+  collectionPath: string,
+  error: unknown,
+  uid = auth.currentUser?.uid ?? null,
+): void {
+  const details =
+    typeof error === 'object' && error !== null
+      ? error
+      : { message: String(error) };
+
+  console.error('[Firestore] Operation failed', {
+    projectId: app.options.projectId,
+    databaseId: '(default)',
+    uid,
+    collectionPath,
+    operation,
+    code:
+      typeof details === 'object' &&
+      details !== null &&
+      'code' in details &&
+      typeof details.code === 'string'
+        ? details.code
+        : 'unknown',
+    message:
+      typeof details === 'object' &&
+      details !== null &&
+      'message' in details &&
+      typeof details.message === 'string'
+        ? details.message
+        : String(error),
+    error,
+  });
+}
+
 console.info('[Firebase] initialized', {
   projectId: app.options.projectId,
   apiKeyConfigured: Boolean(app.options.apiKey),

@@ -1,10 +1,10 @@
 import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, type DocumentSnapshot } from 'firebase/firestore';
 import { BehaviorSubject } from 'rxjs';
 
-import { auth, db } from '../firebase';
+import { auth, db, logFirestoreOperationError } from '../firebase';
 
 export interface StudentProfile {
   uid: string;
@@ -48,7 +48,20 @@ export class AuthService {
       return null;
     }
 
-    const snapshot = await getDoc(doc(db, 'users', uid));
+    let snapshot: DocumentSnapshot;
+
+    try {
+      snapshot = await getDoc(doc(db, 'users', uid));
+    } catch (error: unknown) {
+      logFirestoreOperationError(
+        `getDoc /users/${uid}`,
+        `/users/${uid}`,
+        error,
+        auth.currentUser?.uid ?? null,
+      );
+      throw error;
+    }
+
     if (!snapshot.exists()) {
       this.profileSubject.next(null);
       return null;

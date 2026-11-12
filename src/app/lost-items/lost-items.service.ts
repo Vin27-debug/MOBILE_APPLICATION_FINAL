@@ -13,12 +13,14 @@ import {
   serverTimestamp,
   setDoc,
   type Timestamp,
+  type DocumentData,
+  type Query,
   type Unsubscribe,
   updateDoc,
   where,
 } from 'firebase/firestore';
 
-import { auth, db } from '../firebase';
+import { auth, db, logFirestoreOperationError } from '../firebase';
 
 function getErrorCode(error: unknown): string | undefined {
   if (typeof error === 'object' && error !== null && 'code' in error) {
@@ -136,17 +138,21 @@ export class LostItemsService {
     onItems: (items: LostItem[]) => void,
     onError: (error: Error) => void,
   ): Unsubscribe {
-    console.log('[LostItems] Starting Firestore feed listener...');
-    console.log(
-      '[LostItems] Authenticated UID:',
-      auth.currentUser?.uid ?? 'NOT SIGNED IN',
-    );
-
+    const uid = auth.currentUser?.uid ?? null;
     const itemQuery = query(
       collection(db, 'lostItems'),
       orderBy('createdAt', 'desc'),
       limit(100),
     );
+
+    console.info('[Firestore] Operation started', {
+      projectId: db.app.options.projectId,
+      databaseId: '(default)',
+      uid,
+      collectionPath: '/lostItems',
+      operation: 'onSnapshot list query',
+      query: 'orderBy(createdAt desc), limit(100)',
+    });
 
     return onSnapshot(
       itemQuery,
@@ -168,11 +174,12 @@ export class LostItemsService {
         onItems(items);
       },
       (error) => {
-        console.error('[LostItems] Firestore listener failed:', {
-          code: error.code,
-          message: error.message,
-          name: error.name,
-        });
+        logFirestoreOperationError(
+          'onSnapshot list query: orderBy(createdAt desc), limit(100)',
+          '/lostItems',
+          error,
+          auth.currentUser?.uid ?? null,
+        );
 
         onError(error);
       },
@@ -344,8 +351,16 @@ export class LostItemsService {
     const conversations = collection(db, 'conversations');
 
     const [owned, requested] = await Promise.all([
-      getDocs(query(conversations, where('ownerUid', '==', uid), limit(50))),
-      getDocs(query(conversations, where('requesterUid', '==', uid), limit(50))),
+      this.getConversationQuery(
+        query(conversations, where('ownerUid', '==', uid), limit(50)),
+        'getDocs where(ownerUid == current UID), limit(50)',
+        uid,
+      ),
+      this.getConversationQuery(
+        query(conversations, where('requesterUid', '==', uid), limit(50)),
+        'getDocs where(requesterUid == current UID), limit(50)',
+        uid,
+      ),
     ]);
 
     const byId = new Map<string, OwnershipConversation>();
@@ -362,6 +377,19 @@ export class LostItemsService {
         (right.createdAt?.toMillis() ?? 0) -
         (left.createdAt?.toMillis() ?? 0),
     );
+  }
+
+  private async getConversationQuery(
+    conversationQuery: Query<DocumentData, DocumentData>,
+    operation: string,
+    uid: string,
+  ) {
+    try {
+      return await getDocs(conversationQuery);
+    } catch (error: unknown) {
+      logFirestoreOperationError(operation, '/conversations', error, uid);
+      throw error;
+    }
   }
 
   watchConversationsForUser(
