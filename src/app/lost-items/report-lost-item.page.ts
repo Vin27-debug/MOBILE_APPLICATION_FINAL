@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { Camera, CameraErrorCode, EncodingType } from '@capacitor/camera';
+import { Capacitor } from '@capacitor/core';
 import {
   IonButton,
   IonContent,
@@ -16,7 +18,9 @@ import { AuthService } from '../auth/auth.service';
 import { LostItemsService } from './lost-items.service';
 
 import { addIcons } from 'ionicons';
-import { imageOutline, closeCircle } from 'ionicons/icons';
+import { cameraOutline, imageOutline, closeCircle } from 'ionicons/icons';
+
+const MAX_LOST_ITEM_PHOTO_SIZE = 5 * 1024 * 1024;
 
 function getErrorCode(error: unknown): string | undefined {
   if (typeof error === 'object' && error !== null && 'code' in error) {
@@ -103,11 +107,23 @@ function getErrorCode(error: unknown): string | undefined {
 
               <button
                 type="button"
-                class="photo-icon-button"
+                class="photo-action-button"
+                [disabled]="isTakingPhoto || isLoading"
+                (click)="takePhoto()"
+              >
+                <ion-icon name="camera-outline"></ion-icon>
+                <span>Take Photo</span>
+              </button>
+
+              <button
+                type="button"
+                class="photo-action-button"
                 aria-label="Choose photo from gallery"
+                [disabled]="isTakingPhoto || isLoading"
                 (click)="photoInput.click()"
               >
                 <ion-icon name="image-outline"></ion-icon>
+                <span>Choose from Gallery</span>
               </button>
 
               @if (photoPreviewUrl) {
@@ -217,28 +233,38 @@ function getErrorCode(error: unknown): string | undefined {
 
       .photo-upload {
         display: flex;
-        align-items: flex-start;
-        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
         margin-top: 8px;
       }
 
-      .photo-icon-button {
+      .photo-action-button {
         display: flex;
         align-items: center;
-        justify-content: center;
-        width: 42px;
-        height: 42px;
-        padding: 0;
-        border: none;
-        border-radius: 50%;
+        gap: 8px;
+        min-height: 42px;
+        padding: 0 12px;
+        border: 1px solid #dce5f1;
+        border-radius: 10px;
         background: transparent;
-        color: #00c985;
-        font-size: 25px;
+        color: #2368c7;
+        font-size: 13px;
+        font-weight: 700;
         cursor: pointer;
       }
 
-      .photo-icon-button:active {
-        background: #e6fff5;
+      .photo-action-button ion-icon {
+        font-size: 20px;
+      }
+
+      .photo-action-button:active {
+        background: #f4f7fc;
+      }
+
+      .photo-action-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
       }
 
       .photo-preview {
@@ -297,11 +323,12 @@ export class ReportLostItemPage {
   private readonly router = inject(Router);
 
   constructor() {
-  addIcons({
-    'image-outline': imageOutline,
-    'close-circle': closeCircle,
-  });
-}
+    addIcons({
+      'camera-outline': cameraOutline,
+      'image-outline': imageOutline,
+      'close-circle': closeCircle,
+    });
+  }
 
   itemName = '';
   description = '';
@@ -312,26 +339,32 @@ export class ReportLostItemPage {
   photoPreviewUrl: string | null = null;
 
   isLoading = false;
+  isTakingPhoto = false;
   errorMessage = '';
   successMessage = '';
 
   selectPhoto(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const file = input.files?.[0] ?? null;
+    this.setSelectedPhoto(input.files?.[0] ?? null, input);
+  }
 
+  private setSelectedPhoto(
+    file: File | null,
+    input?: HTMLInputElement,
+  ): void {
     this.errorMessage = '';
 
     if (file && !file.type.startsWith('image/')) {
       this.clearPhoto();
       this.errorMessage = 'Please select an image file.';
-      input.value = '';
+      if (input) input.value = '';
       return;
     }
 
-    if (file && file.size > 5 * 1024 * 1024) {
+    if (file && file.size > MAX_LOST_ITEM_PHOTO_SIZE) {
       this.clearPhoto();
       this.errorMessage = 'The photo must be 5 MB or smaller.';
-      input.value = '';
+      if (input) input.value = '';
       return;
     }
 
@@ -341,6 +374,90 @@ export class ReportLostItemPage {
 
     this.photo = file;
     this.photoPreviewUrl = file ? URL.createObjectURL(file) : null;
+  }
+
+  async takePhoto(): Promise<void> {
+    if (this.isTakingPhoto || this.isLoading) {
+      return;
+    }
+
+    this.errorMessage = '';
+    this.isTakingPhoto = true;
+
+    try {
+      if (!Capacitor.isPluginAvailable('Camera')) {
+        this.errorMessage =
+          'Camera is unavailable on this device. Choose a photo from the gallery instead.';
+        return;
+      }
+
+      const capture = await Camera.takePhoto({
+        quality: 90,
+        encodingType: EncodingType.JPEG,
+        correctOrientation: true,
+        editable: 'no',
+      });
+      const photoUrl =
+        capture.webPath ??
+        (capture.uri ? Capacitor.convertFileSrc(capture.uri) : undefined);
+
+      if (!photoUrl) {
+        throw new Error('The camera did not return a readable photo.');
+      }
+
+      const response = await fetch(photoUrl);
+      if (!response.ok) {
+        throw new Error(
+          `Could not read the captured photo (${response.status}).`,
+        );
+      }
+
+      const blob = await response.blob();
+      const mimeType = blob.type || 'image/jpeg';
+      if (!mimeType.startsWith('image/')) {
+        throw new Error('The camera returned a file that is not an image.');
+      }
+
+      const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType.slice(6);
+      const file = new File([blob], `lost-item-photo.${extension}`, {
+        type: mimeType,
+      });
+
+      this.setSelectedPhoto(file);
+    } catch (error: unknown) {
+      const code = getErrorCode(error);
+      const message =
+        error instanceof Error
+          ? error.message.toLowerCase()
+          : String(error).toLowerCase();
+
+      if (
+        code === CameraErrorCode.TakePhotoCancelled ||
+        message.includes('cancel')
+      ) {
+        return;
+      }
+
+      if (
+        code === CameraErrorCode.CameraPermissionDenied ||
+        message.includes('permission')
+      ) {
+        this.errorMessage =
+          'Camera access was denied. Allow camera access in your device settings and try again.';
+      } else if (code === CameraErrorCode.NoCameraAvailable) {
+        this.errorMessage =
+          'No camera is available on this device. Choose a photo from the gallery instead.';
+      } else {
+        console.error('Could not capture lost item photo:', {
+          code: code ?? 'unknown',
+          error,
+        });
+        this.errorMessage =
+          'Could not take a photo. Try again or choose a photo from the gallery.';
+      }
+    } finally {
+      this.isTakingPhoto = false;
+    }
   }
 
   clearPhoto(): void {

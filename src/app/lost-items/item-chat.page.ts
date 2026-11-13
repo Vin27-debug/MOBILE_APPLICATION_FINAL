@@ -18,6 +18,7 @@ import {
 import type { Unsubscribe } from 'firebase/firestore';
 
 import { AuthService } from '../auth/auth.service';
+import { HapticsFeedbackService } from '../haptics-feedback.service';
 
 import {
   LostItemsService,
@@ -483,6 +484,7 @@ function getErrorStage(error: unknown): string | undefined {
 export class ItemChatPage implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly authService = inject(AuthService);
+  private readonly haptics = inject(HapticsFeedbackService);
   private readonly lostItems = inject(LostItemsService);
   private readonly ngZone = inject(NgZone);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -835,6 +837,7 @@ export class ItemChatPage implements OnDestroy {
         this.conversation.id,
       );
 
+      await this.haptics.success();
       this.conversation = {
         ...this.conversation,
         status: 'verified',
@@ -875,6 +878,7 @@ export class ItemChatPage implements OnDestroy {
         this.conversation.id,
       );
 
+      await this.haptics.success();
       this.item = {
         ...this.item,
         status: 'returned',

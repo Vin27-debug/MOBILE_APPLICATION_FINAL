@@ -1,7 +1,12 @@
 import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, getDoc, type DocumentSnapshot } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  type DocumentData,
+  type DocumentSnapshot,
+} from 'firebase/firestore';
 import { BehaviorSubject } from 'rxjs';
 
 import { auth, db, logFirestoreOperationError } from '../firebase';
@@ -12,6 +17,20 @@ export interface StudentProfile {
   studentId: string;
   email: string;
   role: 'student';
+}
+
+function isStudentProfile(
+  profile: DocumentData,
+  uid: string,
+): profile is StudentProfile {
+  return (
+    profile['uid'] === uid &&
+    typeof profile['fullName'] === 'string' &&
+    Boolean(profile['fullName'].trim()) &&
+    typeof profile['studentId'] === 'string' &&
+    typeof profile['email'] === 'string' &&
+    profile['role'] === 'student'
+  );
 }
 
 @Injectable({ providedIn: 'root' })
@@ -26,9 +45,14 @@ export class AuthService {
 
   constructor() {
     onAuthStateChanged(auth, (user) => {
+      const previousUid = this.userSubject.value?.uid;
       this.userSubject.next(user);
-      if (!user) {
+
+      if (previousUid !== user?.uid) {
         this.profileSubject.next(null);
+      }
+
+      if (!user) {
         return;
       }
 
@@ -43,9 +67,12 @@ export class AuthService {
   }
 
   async loadProfile(uid = auth.currentUser?.uid): Promise<StudentProfile | null> {
-    if (!uid) {
-      this.profileSubject.next(null);
+    if (!uid?.trim() || auth.currentUser?.uid !== uid) {
       return null;
+    }
+
+    if (this.profileSubject.value?.uid !== uid) {
+      this.profileSubject.next(null);
     }
 
     let snapshot: DocumentSnapshot;
@@ -62,19 +89,35 @@ export class AuthService {
       throw error;
     }
 
+    if (auth.currentUser?.uid !== uid) {
+      return null;
+    }
+
     if (!snapshot.exists()) {
       this.profileSubject.next(null);
       return null;
     }
 
-    const profile = snapshot.data() as StudentProfile;
+    const data = snapshot.data();
+    if (!isStudentProfile(data, uid)) {
+      this.profileSubject.next(null);
+      throw new Error(`Student profile /users/${uid} is invalid.`);
+    }
+
+    const profile: StudentProfile = {
+      uid,
+      fullName: data['fullName'].trim(),
+      studentId: data['studentId'],
+      email: data['email'],
+      role: 'student',
+    };
     this.profileSubject.next(profile);
     return profile;
   }
 
   async ensureAuthenticated(): Promise<boolean> {
     await auth.authStateReady();
-    return auth.currentUser !== null;
+    return Boolean(auth.currentUser?.uid.trim());
   }
 
   async logout(): Promise<void> {
@@ -84,5 +127,6 @@ export class AuthService {
 
   async clearSession(): Promise<void> {
     await signOut(auth);
+    this.profileSubject.next(null);
   }
 }

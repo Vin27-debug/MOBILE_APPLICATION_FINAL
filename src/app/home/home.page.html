@@ -31,6 +31,9 @@
       <p class="welcome">WELCOME BACK</p>
       <h2>Hello, {{ displayName }}! 👋</h2>
       <p>Let's help each other find what's missing.</p>
+      @if (profileErrorMessage) {
+        <p class="error-message" role="alert">{{ profileErrorMessage }}</p>
+      }
     </section>
 
     <!-- SEARCH -->

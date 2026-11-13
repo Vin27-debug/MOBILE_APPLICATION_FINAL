@@ -138,7 +138,13 @@ export class LostItemsService {
     onItems: (items: LostItem[]) => void,
     onError: (error: Error) => void,
   ): Unsubscribe {
-    const uid = auth.currentUser?.uid ?? null;
+    const uid = auth.currentUser?.uid;
+    if (!uid?.trim()) {
+      throw new Error(
+        'Cannot start the lost items feed without an authenticated UID.',
+      );
+    }
+
     const itemQuery = query(
       collection(db, 'lostItems'),
       orderBy('createdAt', 'desc'),

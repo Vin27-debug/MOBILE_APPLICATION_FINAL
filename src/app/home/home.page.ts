@@ -9,9 +9,12 @@ import {
 import type { OnDestroy, OnInit } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { IonButton, IonContent } from '@ionic/angular';
+import type { User } from 'firebase/auth';
 import type { Unsubscribe } from 'firebase/firestore';
+import type { Subscription } from 'rxjs';
 
 import { AuthService } from '../auth/auth.service';
+import { HapticsFeedbackService } from '../haptics-feedback.service';
 import { LostItemsService } from '../lost-items/lost-items.service';
 import type {
   LostItem,
@@ -35,11 +38,13 @@ function getErrorCode(error: unknown): string | undefined {
 })
 export class HomePage implements OnInit, OnDestroy {
   private readonly authService = inject(AuthService);
+  private readonly haptics = inject(HapticsFeedbackService);
   private readonly lostItemsService = inject(LostItemsService);
   private readonly router = inject(Router);
   private readonly ngZone = inject(NgZone);
   private readonly cdr = inject(ChangeDetectorRef);
 
+  private authStateSubscription?: Subscription;
   searchText = '';
   currentUid = '';
   displayName = 'Student';
@@ -50,9 +55,13 @@ export class HomePage implements OnInit, OnDestroy {
 
   isLoading = true;
   errorMessage = '';
+  profileErrorMessage = '';
   actionError = '';
 
   private feedSubscription?: Unsubscribe;
+  private activeUid?: string;
+  private isViewActive = false;
+  private authStateReady = false;
 
   get filteredItems(): LostItem[] {
     const search = this.searchText.trim().toLowerCase();
@@ -64,26 +73,89 @@ export class HomePage implements OnInit, OnDestroy {
     );
   }
 
-  async ngOnInit(): Promise<void> {
-    await this.authService.ensureAuthenticated();
+  ngOnInit(): void {
+    this.authStateSubscription = this.authService.user$.subscribe((user) => {
+      if (this.isViewActive && this.authStateReady) {
+        this.handleAuthStateChange(user);
+      }
+    });
+  }
 
-    const user = this.authService.currentUser;
+  async ionViewWillEnter(): Promise<void> {
+    this.isViewActive = true;
+    this.authStateReady = false;
+    this.isLoading = true;
 
-    if (!user) {
-      this.isLoading = false;
-      this.errorMessage = 'Please sign in again to view lost item reports.';
-      this.cdr.detectChanges();
+    const isAuthenticated = await this.authService.ensureAuthenticated();
+
+    if (!this.isViewActive) {
       return;
     }
 
+    this.authStateReady = true;
+    const user = this.authService.currentUser;
+
+    if (!isAuthenticated || !user?.uid.trim()) {
+      this.handleUnauthenticated();
+      return;
+    }
+
+    await this.loadForUser(user);
+  }
+
+  ionViewWillLeave(): void {
+    this.isViewActive = false;
+    this.authStateReady = false;
+    this.stopFeed();
+  }
+
+  ngOnDestroy(): void {
+    this.ionViewWillLeave();
+    this.authStateSubscription?.unsubscribe();
+  }
+
+  private handleAuthStateChange(user: User | null): void {
+    if (!user?.uid.trim()) {
+      this.handleUnauthenticated();
+      return;
+    }
+
+    void this.loadForUser(user);
+  }
+
+  private async loadForUser(user: User): Promise<void> {
+    const uid = user.uid;
+    if (!uid.trim() || this.authService.currentUser?.uid !== uid) {
+      this.handleUnauthenticated();
+      return;
+    }
+
+    if (this.activeUid === uid && this.feedSubscription) {
+      return;
+    }
+
+    this.stopFeed();
+    this.activeUid = uid;
     this.currentUid = user.uid;
-    this.displayName = user.displayName || user.email || 'Student';
+    this.displayName = 'Student';
     this.isLoading = true;
     this.errorMessage = '';
+    this.profileErrorMessage = '';
+    this.items = [];
+    this.conversations = [];
+    this.cdr.detectChanges();
 
     // Real-time Lost Items feed.
     this.feedSubscription = this.lostItemsService.watchOpenItems(
       (items) => {
+        if (
+          !this.isViewActive ||
+          this.activeUid !== uid ||
+          this.authService.currentUser?.uid !== uid
+        ) {
+          return;
+        }
+
         this.ngZone.run(() => {
           this.items = [...items];
           this.isLoading = false;
@@ -92,6 +164,14 @@ export class HomePage implements OnInit, OnDestroy {
         });
       },
       (error) => {
+        if (
+          !this.isViewActive ||
+          this.activeUid !== uid ||
+          this.authService.currentUser?.uid !== uid
+        ) {
+          return;
+        }
+
         this.ngZone.run(() => {
           this.handleFeedError(error);
           this.cdr.detectChanges();
@@ -103,39 +183,87 @@ export class HomePage implements OnInit, OnDestroy {
     try {
       const profile = await this.authService.loadProfile(user.uid);
 
-      if (profile) {
+      if (
+        this.isViewActive &&
+        this.activeUid === uid &&
+        this.authService.currentUser?.uid === uid
+      ) {
         this.ngZone.run(() => {
-          this.displayName = profile.fullName;
+          if (profile?.uid === uid) {
+            this.displayName = profile.fullName;
+          } else {
+            this.profileErrorMessage =
+              'Your student profile could not be found. Please sign in again or contact the application administrator.';
+          }
+
           this.cdr.detectChanges();
         });
       }
     } catch (error: unknown) {
       console.error('Profile could not be loaded:', error);
+
+      if (
+        this.isViewActive &&
+        this.activeUid === uid &&
+        this.authService.currentUser?.uid === uid
+      ) {
+        this.ngZone.run(() => {
+          this.profileErrorMessage =
+            'Your student profile could not be loaded. Check your connection and try again.';
+          this.cdr.detectChanges();
+        });
+      }
+    }
+
+    if (
+      !this.isViewActive ||
+      this.activeUid !== uid ||
+      this.authService.currentUser?.uid !== uid
+    ) {
+      return;
     }
 
     // Load existing conversations.
     try {
       const conversations =
-        await this.lostItemsService.getConversationsForUser(user.uid);
+        await this.lostItemsService.getConversationsForUser(uid);
 
-      this.ngZone.run(() => {
-        this.conversations = conversations;
-        this.cdr.detectChanges();
-      });
+      if (this.isViewActive && this.activeUid === uid) {
+        this.ngZone.run(() => {
+          this.conversations = conversations;
+          this.cdr.detectChanges();
+        });
+      }
     } catch (error: unknown) {
       console.error('Conversations could not be loaded:', {
         code: getErrorCode(error) ?? 'unknown',
       });
 
-      this.ngZone.run(() => {
-        this.conversations = [];
-        this.cdr.detectChanges();
-      });
+      if (this.isViewActive && this.activeUid === uid) {
+        this.ngZone.run(() => {
+          this.conversations = [];
+          this.cdr.detectChanges();
+        });
+      }
     }
   }
 
-  ngOnDestroy(): void {
+  private stopFeed(): void {
     this.feedSubscription?.();
+    this.feedSubscription = undefined;
+    this.activeUid = undefined;
+  }
+
+  private handleUnauthenticated(): void {
+    this.stopFeed();
+    this.currentUid = '';
+    this.displayName = 'Student';
+    this.profileErrorMessage = '';
+    this.items = [];
+    this.conversations = [];
+    this.isLoading = false;
+    this.errorMessage = 'Please sign in again to view lost item reports.';
+    this.cdr.detectChanges();
   }
 
   getInitials(name: string): string {
@@ -187,6 +315,7 @@ export class HomePage implements OnInit, OnDestroy {
       const conversationId =
         await this.lostItemsService.requestOwnership(item);
 
+      await this.haptics.success();
       await this.router.navigate(['/chat', conversationId]);
     } catch (error: unknown) {
       const code = getErrorCode(error);
@@ -204,11 +333,19 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   async logout(): Promise<void> {
+    this.stopFeed();
+
     try {
       await this.authService.logout();
     } catch (error: unknown) {
       console.error('Sign out failed:', error);
       this.actionError = 'Could not sign out. Please try again.';
+
+      const user = this.authService.currentUser;
+      if (this.isViewActive && user?.uid.trim()) {
+        void this.loadForUser(user);
+      }
+
       this.cdr.detectChanges();
     }
   }
